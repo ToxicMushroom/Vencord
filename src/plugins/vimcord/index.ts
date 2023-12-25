@@ -17,13 +17,7 @@
 */
 
 import { Devs } from "@utils/constants";
-import { relaunch } from "@utils/native";
-import { canonicalizeMatch, canonicalizeReplace, canonicalizeReplacement } from "@utils/patches";
 import definePlugin from "@utils/types";
-import * as Webpack from "@webpack";
-import { extract, filters, findAll, search } from "@webpack";
-import { React, ReactDOM } from "@webpack/common";
-import type { ComponentType } from "react";
 
 const WEB_ONLY = (f: string) => () => {
     throw new Error(`'${f}' is Discord Desktop only.`);
@@ -39,34 +33,76 @@ const KEY_J = 74;
 const KEY_K = 75;
 
 const KEY_ESCAPE = 27;
-let mode = VimMode.Nav;
+
+function isInViewport(element) {
+    const rect = element.getBoundingClientRect();
+    return (
+        rect.top >= 48 &&
+        rect.left >= 0 &&
+        rect.bottom <= ((window.innerHeight || document.documentElement.clientHeight) - 68) &&
+        rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+    );
+}
+
+/** Moves the current view n * (25px, or 50px with modifier) */
+function moveStatic(n: number, mod: boolean) {
+    const msgNav = document.getElementById("messagesNavigationDescription");
+    const scroller = msgNav?.parentElement?.parentElement?.parentElement;
+    // TODO: remove cursed
+    const modMult = <number><unknown>mod + 1;
+    const amount = n * 25 * modMult;
+
+    if (scroller) {
+        scroller.scrollBy(0, amount);
+    } else {
+        console.warn("Did not find a scrollable surface on this screen");
+    }
+}
+
+
+interface KeyHandler {
+    handleKeyDown(k: KeyboardEvent);
+}
+
+
+class InsertMode implements KeyHandler {
+    handleKeyDown(k: KeyboardEvent) {
+        switch (k.keyCode) {
+            case (KEY_ESCAPE):
+                mode = new NormalMode();
+                break;
+
+        }
+    }
+
+}
+class NormalMode implements KeyHandler {
+    handleKeyDown(k: KeyboardEvent) {
+        switch (k.keyCode) {
+            case (KEY_I):
+                mode = new InsertMode();
+                break;
+            case (KEY_J):
+                moveStatic(1, k.shiftKey);
+                break;
+            case (KEY_K):
+                moveStatic(-1, k.shiftKey);
+                break;
+        }
+        k.preventDefault();
+        k.stopImmediatePropagation();
+    }
+}
+
+let mode = new NormalMode();
+
 export default definePlugin({
     name: "VimCord",
     description: "Adds a vim-like mode to your discord chat (navigation and input mode).",
     authors: [Devs.Ven],
     handleKeyDown(k) {
-        console.log(k);
-        console.log(`Current mode ${mode}`);
-
-        if (mode === VimMode.Nav) {
-            if (k.keyCode === KEY_I) {
-                mode = VimMode.Insert;
-            } else if (k.keyCode === KEY_J) {
-                // scroll up
-                const shifted = k.shiftKey;
-                if (shifted)
-                    console.info("Big scroll up");
-            } else if (k.keyCode === KEY_K) {
-                // scroll down
-            }
-
-            k.preventDefault();
-            k.stopPropagation();
-        } else if (mode === VimMode.Insert) {
-            if (k.keyCode === KEY_ESCAPE) {
-                mode = VimMode.Nav;
-            }
-        }
+        console.info(k);
+        mode.handleKeyDown(k);
     },
 
     start() {
